@@ -17,7 +17,7 @@ from selenium.common.exceptions import TimeoutException
 
 
 def sleepy(sleepytime=2):
-    time.sleep(sleepytime+np.random.randint(2))
+    time.sleep(sleepytime + np.random.randint(2))
 
 
 def ff(elementname, classname):
@@ -91,6 +91,8 @@ def login():
     submit = driver.find_element_by_xpath('//input[@type="submit"]')
     submit.click()
     sleepy()
+
+
 # ---===================[reusable code [end]]====================--- #
 
 
@@ -152,19 +154,21 @@ def getStudentIDfromGradebook(courseid):
 
 
 def getallID(df_cid):
-
     df_studentid = pd.DataFrame(
         {'student_id': [], 'student_name': [], 'student_email': []})
 
-    # df_courseid = df_cid.set_index('courseid')
-    df_courseid['students'] = [''] * len(df_courseid)
+    # need to set 'courseid' as index otherwise cannot access the row using 'courseid'
+    df_cid.set_index('courseid', inplace=True)
 
-    for courseid in df_courseid['courseid']:
+    # df_courseid = df_cid.set_index('courseid')
+    df_cid['students'] = ''  # [''] * len(df_courseid)
+
+    for courseid in df_cid.index:
         df_studentid_temp = getStudentIDfromGradebook(courseid)
 
         # add student list to each course
         stuids = set(df_studentid_temp['student_id'])
-        df_courseid['students'].loc[courseid] = stuids
+        df_cid['students'].loc[courseid] = stuids
 
         # merge all student dataframe to make one big dataframe for student IDs
         df3 = df_studentid_temp.merge(df_studentid, on=['student_id', 'student_name', 'student_email'], how='outer')
@@ -177,21 +181,14 @@ def getallID(df_cid):
     df_studentid.set_index('student_id').to_csv(student_database)
 
     course_database = PARENT_DIRECTORY + 'course_id.csv'
-    df_courseid.set_index('courseid').to_csv(course_database)
+    df_cid.to_csv(course_database)
 
     return df_studentid
 
 
 def check_logs(studentid, courseid):
-
     log_url = 'https://online.brooklinecollege.edu/report/log/user.php?id={0}&course={1}&mode=today'.format(studentid,
                                                                                                             courseid)
-
-    #     logstatus_dict = {0: 'not started', 1: 'started not submitted', 2: 'submitted'}
-    #     suspicionlevel_dict = {0: 'clean', 1: 'alert'}
-
-    #     page = requests.get(log_url)
-    #     log_soup = bs(driver.page_source, 'lxml')
 
     driver.get(log_url)
     sleepy(4)
@@ -206,7 +203,6 @@ def check_logs(studentid, courseid):
 
     log = list(df_log['Event name'])
     if 'Quiz attempt started' in log:
-        #         print("start")
         endindex = log.index('Quiz attempt started') + 1
         if 'Quiz attempt submitted' in log:
             startindex = log.index('Quiz attempt submitted')
@@ -222,6 +218,14 @@ def check_logs(studentid, courseid):
         suspicionlevel = 1
     else:
         suspicionlevel = 0
+
+    if suspicionlevel < 0:  # Error occured
+        print("Error")
+
+    if suspicionlevel == 1:
+        print("Something smells fishy .... Check logs")
+    else:
+        print("Clean")
 
     return suspicionlevel
 
@@ -269,7 +273,6 @@ def getGradebooks(df_courseid):
         if verbose:
             print("CSV file saved")
 
-
 # ---========================MAIN MODULE=========================---
 
 verbose = True
@@ -282,7 +285,9 @@ driver = load_webdriver()
 login()
 df_courseid = getCourseID()
 df_studentid = getallID(df_courseid)
-# getGradebooks(df_courseid)
+getGradebooks(df_courseid)
+# suspicionlevel = check_logs(sid, cid)
+
 
 driver.close()
 if verbose:

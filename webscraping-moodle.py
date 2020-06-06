@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import glob
 import os
+import pickle
 
 import pandas as pd
 import numpy as np
@@ -18,6 +19,7 @@ from selenium.common.exceptions import TimeoutException
 from tabulate import tabulate
 
 
+# ---==================[reusable code [start]]===================--- #
 def sleepy(sleepytime=2):
     time.sleep(sleepytime + np.random.randint(2))
 
@@ -26,9 +28,34 @@ def ff(elementname, classname):
     return driver.find_elements_by_xpath('//' + elementname + '[@class="' + classname + '"]')
 
 
-# ---==================[reusable code [start]]===================--- #
+def save_cookie(driver, f):
+    with open(f, 'wb') as filehandler:
+        pickle.dump(driver.get_cookies(), filehandler)
+
+
+def load_cookie(driver, f):
+    if os.path.exists(f):
+        with open(f, 'rb') as cookiesfile:
+            cookies = pickle.load(cookiesfile)
+            for cookie in cookies:
+                print(cookie)
+                driver.add_cookie(cookie)
+        return True
+    else:
+        return False
+
+
+def get_element(cl, el='div'):
+    try:
+        button = driver.find_element_by_xpath('//' + el + '[@class="' + cl + '"]')
+    except:
+        return False
+
+    return button
+
+
 # -----------------------[Open ChromeDriver]------------------------ #
-def load_webdriver():
+def load_webdriver(url, headless=False, incognito=False):
     """
     Loads ChromeDriver with ChromeOptions[--incognito, download.default_directory, user-agent]
     :return:
@@ -39,18 +66,19 @@ def load_webdriver():
                  'Chrome/60.0.3112.50 Safari/537.36'
 
     # set default download directory and user0agent with ChromeOptions
-    chromeOptions = webdriver.ChromeOptions()
+    chromeoptions = webdriver.ChromeOptions()
     prefs = {"download.default_directory": PARENT_DIRECTORY}
-    chromeOptions.add_experimental_option("prefs", prefs)
-    chromeOptions.add_argument("--incognito")
-    chromeOptions.add_argument('user-agent={0}'.format(user_agent))
-    # chromeOptions.add_argument('--no-sandbox')
-    # chromeOptions.add_argument('--window-size=1420,1080')
-    # chromeOptions.add_argument('--headless')
-    # chromeOptions.add_argument('--disable-gpu')
-    # chromeOptions.add_argument("--allow-insecure-localhost")
 
-    driver1 = webdriver.Chrome(options=chromeOptions)
+    chromeoptions.add_experimental_option("prefs", prefs)
+    chromeoptions.add_argument('user-data-dir={0}'.format(USER_DIR))
+    chromeoptions.add_argument('user-agent={0}'.format(user_agent))
+
+    if incognito:
+        chromeoptions.add_argument("--incognito")
+    if headless:
+        chromeoptions.add_argument('--headless')
+
+    driver1 = webdriver.Chrome(options=chromeoptions)
     driver1.get(url)
     if verbose:
         print("Opening ", url)
@@ -59,18 +87,30 @@ def load_webdriver():
 
 
 # -----------------------------[Login]------------------------------ #
-def login():
+def login(driver, url_login, logincredfile, cookiesfile):
     """
     Logs into the website using stored credentials form the file login.cred
     :param driver:
-    :param verbose:
+    :param url_login:
+    :param logincredfile:
+    :param cookiesfile:
     :return:
     """
 
+    # check if cookies exist
+    # if load_cookie(driver, cookiesfile):
+    #     print("Cookies found")
+    #     print("Getting", url_login)
+    #     driver.get(url_login)
+    #     print("Cookies working ... proceeding")
+    #     return
+    # else:
+    #     print("No cookies found")
+
+    # BEGIN MANUAL LOGIN
     # login credentials from file to avoid exposing them in code
-    file = PARENT_DIRECTORY + 'login.cred'
-    if os.path.exists(file):
-        f = open(file, "r")
+    if os.path.exists(logincredfile):
+        f = open(logincredfile, "r")
         uname = f.readline().strip()
         pwd = f.readline().strip()
         f.close()
@@ -93,9 +133,15 @@ def login():
     submit.click()
     sleepy()
 
+    # saving session
+    # save_cookie(driver, cookiesfile)
 
+    if verbose:
+        print('Successfull login')
+
+    sleepy(5)
+# ---------------------------[End Login]---------------------------- #
 # ---===================[reusable code [end]]====================--- #
-
 
 def getCourseID():
     # check if sidebar is open or not. If the sidebar is not open then click it open
@@ -115,7 +161,8 @@ def getCourseID():
             courseid.append(re.findall(r'\d+', c.get_attribute('href'))[0])
             courselink_elements.append(c)
 
-    coursenames = list(map(lambda x: re.findall(r'.{7}$', x)[0], courses))
+    # coursenames = list(map(lambda x: re.findall(r'.{7}$', x)[0], courses))
+    coursenames = courses
     df_courseid = pd.DataFrame({'coursenames': coursenames, 'courseid': courseid})
 
     df_courseid.drop_duplicates(inplace=True)
@@ -128,6 +175,10 @@ def getStudentIDfromGradebook(courseid):
     url_gradebook_report = 'https://online.brooklinecollege.edu/grade/report/grader/index.php?id=' + str(courseid)
 
     driver.get(url_gradebook_report)
+
+    if verbose:
+        print(url_gradebook_report)
+
     sleepy()
     htmlsource = driver.page_source
     soup = bs(htmlsource, 'lxml')
@@ -150,14 +201,14 @@ def getStudentIDfromGradebook(courseid):
     student_emails = list(map(lambda x: x.text, soup.findAll('td', class_='userfield useremail cell c2')))
 
     df_studentid = pd.DataFrame(
-        {'student_id': student_ids, 'student_name': student_names, 'student_email': student_emails})
+        {'studentid': student_ids, 'student_name': student_names, 'student_email': student_emails})
 
     return df_studentid
 
 
 def getallID(df_cid1):
     df_studentid = pd.DataFrame(
-        {'student_id': [], 'student_name': [], 'student_email': []})
+        {'studentid': [], 'student_name': [], 'student_email': []})
 
     # need to set 'courseid' as index otherwise cannot access the row using 'courseid'
     df_cid = df_cid1.set_index('courseid')
@@ -169,20 +220,20 @@ def getallID(df_cid1):
         df_studentid_temp = getStudentIDfromGradebook(courseid)
 
         # add student list to each course
-        stuids = set(df_studentid_temp['student_id'])
+        stuids = set(df_studentid_temp['studentid'])
         df_cid['students'].loc[courseid] = stuids
 
         # merge all student dataframe to make one big dataframe for student IDs
-        df3 = df_studentid_temp.merge(df_studentid, on=['student_id', 'student_name', 'student_email'], how='outer')
+        df3 = df_studentid_temp.merge(df_studentid, on=['studentid', 'student_name', 'student_email'], how='outer')
 
         df_studentid = df3
 
     #         print(df3)
 
-    student_database = PARENT_DIRECTORY + 'student_id.csv'
-    df_studentid.set_index('student_id').to_csv(student_database)
+    student_database = PARENT_DIRECTORY + 'studentid.csv'
+    df_studentid.set_index('studentid').to_csv(student_database)
 
-    course_database = PARENT_DIRECTORY + 'course_id.csv'
+    course_database = PARENT_DIRECTORY + 'courseid.csv'
     df_cid.to_csv(course_database)
 
     return df_studentid
@@ -223,14 +274,6 @@ def check_logs(studentid, courseid):
     else:
         suspicionlevel = 0
 
-    if suspicionlevel < 0:  # Error occured
-        print("Error")
-
-    if suspicionlevel == 1:
-        print("Something smells fishy .... Check logs")
-    else:
-        print("Clean")
-
     return suspicionlevel
 
 
@@ -242,7 +285,7 @@ def getGradebooks(df_courseid):
     courseid = df_courseid['courseid']
 
     for cname, cid in zip(courses, courseid):
-        url = 'https://online.brooklinecollege.edu/grade/export/txt/index.php?id=' + cid
+        url = 'https://online.brooklinecollege.edu/grade/export/txt/index.php?id=' + str(cid)
         if verbose:
             print("Getting " + cname)
             print(url)
@@ -288,7 +331,8 @@ def renamefiles():
         if len(phxcsv) == 0:
             continue
 
-        fname = re.sub('PHX\..*?\.| Grades.*d', '', f)
+        # fname = re.sub('PHX\..*?\.| Grades.*d', '', f)
+        fname = re.sub('Grades.*d', '', f)
         os.rename(f, fname)
 
 
@@ -302,7 +346,11 @@ def identifyemptygrades():
             print("Reading", f)
 
         df = pd.read_csv(f)
-        df.drop(columns=['ID number', 'Campus', 'Program', 'Email address'], inplace=True)
+        try:
+            df.drop(columns=['ID number', 'Campus', 'Program', 'Email address'], inplace=True)
+        except KeyError:
+            continue
+
         reviewcols = df.columns[['eview' in x for x in df.columns]]
         df.drop(columns=reviewcols, inplace=True)
         for col in df.columns:
@@ -333,23 +381,23 @@ def calcfinalgrade():
         if len(phxcsv) == 0:
             continue
 
-        # if verbose:
-        #     print("Reading", f)
+        if verbose:
+            print("Reading", f)
 
         df = pd.read_csv(f)
         try:
             df.drop(columns=['ID number', 'Campus', 'Program', 'Email address'], inplace=True)
         except KeyError:
             continue
-        df = df[(df["Course total (Percentage)"] != '-')]
+        df = df[(df["Course total (Percentage)"] != '-')].dropna()
         df['finalgrade'] = list(
             map(lambda x: np.round(float(re.findall('\d+.\d+', x)[0]), 0), df["Course total (Percentage)"]))
         df = df[['First name', 'Last name', 'finalgrade']][(df['First name'] != 'Student')]
         df['lettergrade'] = list(map(determine_grade, df['finalgrade']))
 
         cid = re.findall('\/.*\/(.*)\.csv', f)[0]
-        fname = PARENT_DIRECTORY + 'final_grades_' + cid
-        df.to_csv(fname + '.csv')
+        fname = PARENT_DIRECTORY + 'final_grades_' + str(cid)
+        df.to_csv(fname + '.csv', index=False)
 
         print(cid)
         # print(tabulate(df, headers='keys', tablefmt='psql'))
@@ -364,25 +412,81 @@ def calcfinalgrade():
         plt.savefig(fname + '.png')
         plt.close()
 
+def check_student_log():
+    sname = input("Enter student name: ")
+
+    if verbose:
+        print("Reading", PARENT_DIRECTORY + 'studentid.csv')
+        print("Reading", PARENT_DIRECTORY + 'courseid.csv')
+
+    dfstudentid = pd.read_csv(PARENT_DIRECTORY + 'studentid.csv')
+    dfcourseid = pd.read_csv(PARENT_DIRECTORY + 'courseid.csv')
+
+    dfstudent = dfstudentid[[sname in name for name in dfstudentid['student_name']]]
+    print(dfstudent)
+    if len(dfstudent) > 1:
+        sid = input("Select student ID")
+    else:
+        sid = int(dfstudent['studentid'])
+    sid = str(sid)
+
+    dfcourse = dfcourseid[[sid in students for students in dfcourseid['students']]]
+    if len(dfcourse)>1:
+        print(dfcourse)
+        cid = input("Select course ID")
+    else:
+        cid = int(dfcourse['courseid'])
+    cid = str(cid)
+
+    suspicionlevel = check_logs(sid, cid)
+
+    if suspicionlevel < 0:  # Error occured
+        print("Error")
+
+    if suspicionlevel == 1:
+        print("Something smells fishy .... Check logs")
+    else:
+        print("Clean")
 
 
 # ---========================MAIN MODULE=========================---
 verbose = True
 
-# set default download directory
-PARENT_DIRECTORY = '/home/jones/grive/coding/python/moodle-proctoring/data/'
+# set environ variables
+PARENT_DIRECTORY = '/home/jones/grive/coding/python/moodle-automation/data/'
+USER_DIR = '/home/jones/.config/selenium'
 url = 'https://online.brooklinecollege.edu/'
+logincredfile = PARENT_DIRECTORY + 'login.cred'
+cookiesfile = PARENT_DIRECTORY + 'cookies-bc'
+url_login = 'https://online.brooklinecollege.edu/my/'
 
-# driver = load_webdriver()
-# login()
-# df_courseid = getCourseID()
-# df_studentid = getallID(df_courseid)
-# getGradebooks(df_courseid)
-# # suspicionlevel = check_logs(sid, cid)
-# driver.close()
-# if verbose:
-#     print("ChromeDriver Shutdown")
+courseidfile = PARENT_DIRECTORY + 'courseid.csv'
+studentidfile = PARENT_DIRECTORY + 'studentid.csv'
 
-# renamefiles()
+
+# load driver
+driver = load_webdriver(url, headless=True, incognito=True)
+# log into website
+login(driver, url_login, logincredfile, cookiesfile)
+driver.maximize_window()
+
+if os.path.exists(courseidfile):
+    df_courseid = pd.read_csv(courseidfile)
+else:
+    df_courseid = getCourseID()
+
+if os.path.exists(studentidfile):
+    df_studentid = pd.read_csv(studentidfile)
+else:
+    df_studentid = getallID(df_courseid)
+
+getGradebooks(df_courseid)
+renamefiles()
+# calcfinalgrade()
+#
+driver.close()
+if verbose:
+    print("ChromeDriver Shutdown")
+
 # identifyemptygrades()
-calcfinalgrade()
+# check_student_log()

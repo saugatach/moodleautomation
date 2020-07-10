@@ -508,7 +508,7 @@ class MoodleAutomation:
         """
         Accepts the Moodle gradebook in percent format as df and searches for empty grades in all columns which belong
         to the grading element s. s is usually a search pattern like (Quiz:HW*). el is the column name for
-        emptygradecount. So a typical call would be getstrugglingstudents(df, 'Quiz:HW*', 'hw')
+        emptygradecount. So a typical call would be getstrugglingstudents(df, 'hw', 'Quiz:HW*')
         :param df:
         :param s:
         :param el:
@@ -578,24 +578,35 @@ class MoodleAutomation:
 
         return dfstrugglingstudents
 
-    def courseperf(self, df):
+    def courseperf(self, df, categorypattern: dict = None):
         """
         Accepts the Moodle gradebook in percent format as df and searches for empty grades for 3 different
-        categories ['HW', 'Quiz', 'Midterm']. The patterns to search for each category needs to be supplied in a dict
-        format as {'hw': 'Quiz:HW*', 'quiz': 'Quiz:Quiz*', 'midterm': 'Quiz:Midterm \\(Percentage\\)'}
+        categories ['HW', 'Quiz', 'Midterm']. categorypattern contains the patterns to search for each category
+        and needs to be supplied in a dict format as
+        {'hw': 'Quiz:HW*', 'quiz': 'Quiz:Quiz*', 'midterm': 'Quiz:Midterm \\(Percentage\\)'}
         :param df:
+        :param categorypattern:
         :return:
         """
-        
-        df1 = self.getstrugglingstudents(df, 'Quiz:HW*', 'hw')
-        df2 = self.getstrugglingstudents(df, 'Quiz:Quiz*', 'quiz')
-        df3 = self.getstrugglingstudents(df, 'Quiz:Midterm \\(Percentage\\)', 'midterm')
 
-        dfslist = [df1, df2, df3]
+        if categorypattern is None:
+            categorypattern = {'hw': 'Quiz:HW*', 'quiz': 'Quiz:Quiz*', 'midterm': 'Quiz:Midterm \\(Percentage\\)'}
 
-        # use list comprehension to filter out the dataframes which are empty len(df)=0
-        dfslist = [x for x in dfslist if len(x) > 0]
+        dfslist = []
+        for k, v in categorypattern.items():
+            dftemp = self.getstrugglingstudents(df, k, v)
+            if len(dftemp) > 0:
+                dfslist.append(dftemp)
 
+        # df1 = self.getstrugglingstudents(df, 'Quiz:HW*', 'hw')
+        # df2 = self.getstrugglingstudents(df, 'Quiz:Quiz*', 'quiz')
+        # df3 = self.getstrugglingstudents(df, 'Quiz:Midterm \\(Percentage\\)', 'midterm')
+        #
+        # dfslist = [df1, df2, df3]
+        #
+        # # use list comprehension to filter out the dataframes which are empty len(df)=0
+        # dfslist = [x for x in dfslist if len(x) > 0]
+        #
         # recursively merge the dataframe from left to right in the list of dataframes "dfslist"
         dfsrugglingstudents = reduce(lambda x, y: pd.merge(x, y, on='Name', how='outer'), dfslist)
         dfsrugglingstudents = dfsrugglingstudents.fillna(0)
@@ -610,12 +621,13 @@ class MoodleAutomation:
         # df contains the entire gradebook. We do not need all data only specific columns
         # generate the list of columns we want to keep
         templist = dfsrugglingstudents.columns.tolist()
-        templist.append('grade')
+        templist.extend(['Email address', 'Program', 'grade'])
 
         dfsrugglingstudents = dfsrugglingstudentsalldata.rename(columns={'Course total (Percentage)': 'grade'})[
             templist]
         # remove % sign from "Overall Grade" and convert it to float
-        dfsrugglingstudents['grade'] = dfsrugglingstudents['grade'].map(lambda x: float(x.rstrip(' %')))
+        dfsrugglingstudents['grade'] = dfsrugglingstudents['grade'].fillna(0).astype(str).\
+            map(lambda x: re.sub('-', '0 %', x)).map(lambda x: float(x.rstrip(' %')))
 
         # rederive the riskscore using the "Overall Grade". Higher "Overall Grade" means lower riskscore
         # so (100 - "Overall Grade") is used instead of "Overall Grade"
@@ -623,9 +635,15 @@ class MoodleAutomation:
             (dfsrugglingstudents['riskscore'] + (100 - dfsrugglingstudents['grade'])) / 2, 0)
 
         # rearranging columns to put riskscore at the end
-        coltoarrange = dfsrugglingstudents.columns[:-2].tolist()
-        coltoarrange.extend(['grade', 'riskscore'])
+        coltoarrange = ['Name', 'Email address',  'Program', 'grade', 'riskscore']
+        list(map(lambda x: coltoarrange.append(re.findall(r'missed.*', x)[0]) if len(re.findall(r'missed.*', x)) > 0 else '',
+            dfsrugglingstudents.columns.tolist()))
+        # print(coltoarrange)
+
         dfsrugglingstudents = dfsrugglingstudents[coltoarrange]
+
+        # replace 'Nursing' with 'Nur' and 'Medical Laboratory Technician' with 'MLT'
+        dfsrugglingstudents = dfsrugglingstudents.replace(['Nursing', 'Medical Laboratory Technician'], ['NUR', 'MLT'])
 
         return dfsrugglingstudents
 

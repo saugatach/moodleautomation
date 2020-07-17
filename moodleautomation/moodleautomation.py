@@ -527,18 +527,19 @@ class MoodleAutomation:
 
         # select all columns which belong to the grading category s
         # s can be a pattern like (Quiz:HW*) which selects all HW assignments
-        quizlist = df.columns[df.columns.str.contains(s)]
+        quizlist = df.columns[df.columns.str.contains(s)].to_list()
         # df.columns.str converts df.columns to a list of strings which is then searched fo a match with regex s
         # the match is generated using contains() which forms a boolean mask
         # which is TRUE when list item matches the pattern
         # that boolean mask is then used to filter only the columns in that category identified by the regex s
         # this is a good piece of code
 
-        for col in quizlist.to_list():
+        # to debug uncomment following line
+        # print(quizlist)
+
+        for col in quizlist:
             # select all empty rows and extract student names
-            emptygradesdf = df[df[col] == "-"][['First name', 'Last name']]
-            emptygradesdf['Name'] = emptygradesdf['First name'] + ' ' + emptygradesdf['Last name']
-            emptygradesdf = emptygradesdf['Name']
+            emptygradesdf = df[df[col] == "-"]['Email address']
             noofemptygrades = len(emptygradesdf)
 
             # check if quiz element is open with at least one attempt
@@ -567,7 +568,8 @@ class MoodleAutomation:
         # counting the number of times a student appears in strugglingstudentlist gives us information about how
         # many grading elements the student has not attempted yet
         dfstrugglingstudents = pd.DataFrame(
-            {'Name': list(strugglingstudents), missedcol: [strugglingstudentlist.count(x) for x in strugglingstudents]})
+            {'Email address': list(strugglingstudents), missedcol: [strugglingstudentlist.count(x)
+                                                                    for x in strugglingstudents]})
 
         # find what percentage of all open quizzes the student hasn't attempted yet
         dfstrugglingstudents[missedcolpercent] = np.round(dfstrugglingstudents[missedcol] / len(assignedquizzes) * 100,
@@ -590,7 +592,7 @@ class MoodleAutomation:
         """
 
         if categorypattern is None:
-            categorypattern = {'hw': 'Quiz:HW*', 'quiz': 'Quiz:Quiz*', 'midterm': 'Quiz:Midterm \\(Percentage\\)'}
+            categorypattern = {'hw': 'HW*', 'quiz': ':Quiz \\d+', 'midterm': 'Midterm \\(Percentage\\)'}
 
         dfslist = []
         for k, v in categorypattern.items():
@@ -598,17 +600,8 @@ class MoodleAutomation:
             if len(dftemp) > 0:
                 dfslist.append(dftemp)
 
-        # df1 = self.getstrugglingstudents(df, 'Quiz:HW*', 'hw')
-        # df2 = self.getstrugglingstudents(df, 'Quiz:Quiz*', 'quiz')
-        # df3 = self.getstrugglingstudents(df, 'Quiz:Midterm \\(Percentage\\)', 'midterm')
-        #
-        # dfslist = [df1, df2, df3]
-        #
-        # # use list comprehension to filter out the dataframes which are empty len(df)=0
-        # dfslist = [x for x in dfslist if len(x) > 0]
-        #
         # recursively merge the dataframe from left to right in the list of dataframes "dfslist"
-        dfsrugglingstudents = reduce(lambda x, y: pd.merge(x, y, on='Name', how='outer'), dfslist)
+        dfsrugglingstudents = reduce(lambda x, y: pd.merge(x, y, on='Email address', how='outer'), dfslist)
         dfsrugglingstudents = dfsrugglingstudents.fillna(0)
 
         # calculate riskscore. This is only a temporary score. Final riskscore will calculated using Overall Grade
@@ -616,12 +609,12 @@ class MoodleAutomation:
 
         # get the current "Overall Grade" for the struggling students as listed in "dfsrugglingstudents"
         df['Name'] = df['First name'] + ' ' + df['Last name']
-        dfsrugglingstudentsalldata = dfsrugglingstudents.merge(df, on='Name', how='inner')
+        dfsrugglingstudentsalldata = dfsrugglingstudents.merge(df, on='Email address', how='inner')
 
         # df contains the entire gradebook. We do not need all data only specific columns
         # generate the list of columns we want to keep
         templist = dfsrugglingstudents.columns.tolist()
-        templist.extend(['Email address', 'Program', 'grade'])
+        templist.extend(['Name', 'Program', 'grade'])
 
         dfsrugglingstudents = dfsrugglingstudentsalldata.rename(columns={'Course total (Percentage)': 'grade'})[
             templist]
@@ -635,7 +628,7 @@ class MoodleAutomation:
             (dfsrugglingstudents['riskscore'] + (100 - dfsrugglingstudents['grade'])) / 2, 0)
 
         # rearranging columns to put riskscore at the end
-        coltoarrange = ['Name', 'Email address',  'Program', 'grade', 'riskscore']
+        coltoarrange = ['Email address', 'Name', 'Program', 'grade', 'riskscore']
         list(map(lambda x: coltoarrange.append(re.findall(r'missed.*', x)[0]) if len(re.findall(r'missed.*', x)) > 0 else '',
             dfsrugglingstudents.columns.tolist()))
         # print(coltoarrange)
@@ -643,7 +636,109 @@ class MoodleAutomation:
         dfsrugglingstudents = dfsrugglingstudents[coltoarrange]
 
         # replace 'Nursing' with 'Nur' and 'Medical Laboratory Technician' with 'MLT'
-        dfsrugglingstudents = dfsrugglingstudents.replace(['Nursing', 'Medical Laboratory Technician'], ['NUR', 'MLT'])
+        dfsrugglingstudents = dfsrugglingstudents.replace(['Nursing', 'Medical Laboratory Technician',
+                                                           'Medical Laboratory Science'], ['NUR', 'MLT', 'MLS'])
+
+        # sort by risk score
+        dfsrugglingstudents = dfsrugglingstudents.sort_values(by=['riskscore']).reset_index()
 
         return dfsrugglingstudents
+
+    def getemptyquizzes(self, df, studentemail, categorypattern: dict = None):
+        """
+        Returns a list of quizzes and assignments from dfcoursedata that the student has not completed.
+        The primary key is studentemail. Returns a list of missed quizzes.
+        Accepts the Moodle gradebook in percent format as df and searches for empty grades for 3 different
+        categories ['HW', 'Quiz', 'Midterm']. categorypattern contains the patterns to search for each category
+        and needs to be supplied in a dict format as
+        {'hw': 'Quiz:HW*', 'quiz': 'Quiz:Quiz*', 'midterm': 'Quiz:Midterm \\(Percentage\\)'}
+        :param df:
+        :param studentemail:
+        :param categorypattern:
+        :return:
+        """
+        if categorypattern is None:
+            categorypattern = {'hw': 'HW*', 'quiz': ':Quiz \\d+', 'midterm': 'Midterm \\(Percentage\\)'}
+
+        missedquizzes = []
+        for k, v in categorypattern.items():
+            missedquizzesbycategory = self.getemptyquizzesbycategory(df, v, studentemail)
+            if len(missedquizzesbycategory) > 0:
+                missedquizzes.extend(missedquizzesbycategory)
+
+        return missedquizzes
+
+    def getemptyquizzesbycategory(self, df, s, studentemail):
+        """
+        Accepts the Moodle gradebook in percent format as df and searches for empty grades in all columns which belong
+        to the grading element s. s is usually a search pattern like (Quiz:HW*). el is the column name for
+        emptygradecount. Finally filter for a single student by student email and returns list of missed assignments
+        by that student
+        :param df:
+        :param s:
+        :param studentemail:
+        :return:
+        """
+
+        # get total number of students
+        totstudents = len(df)
+        # if over 20% students have already attempted the grading element then anyone who hasn't is falling behind
+        # find 80% of class size
+        totstudents80percent = int(len(df) * 0.8)
+        # if number of empty grades is less than 80% of class size then anyone who hasn't attempted is falling behind
+
+        # select all columns which belong to the grading category s
+        # s can be a pattern like (Quiz:HW*) which selects all HW assignments
+        quizlist = df.columns[df.columns.str.contains(s)].to_list()
+
+        missedquizzes = []
+        assignedquizzes = []
+
+        # generate list of columns to iterate through by discarding non-numerical columns
+        # quizlist = df.drop(columns=["First name", "Last name", "ID number", "Campus",
+        #                                       "Program", "Email address", "Last downloaded from this course"])
+        for col in quizlist:
+            # select all empty rows and extract student names
+            emptygradesdf = df[df[col] == "-"]['Email address']
+            noofemptygrades = len(emptygradesdf)
+
+            # check if quiz element is open with at least one attempt
+            if noofemptygrades < totstudents:
+                assignedquizzes.append(col)
+
+            if noofemptygrades > 0:
+                # check if quiz element has at least 20% attempt
+                # students who haven't attempted yet are behind
+                if noofemptygrades < totstudents80percent:
+                    # check if the student didn't attempt this particular assignment
+                    if emptygradesdf.str.contains(studentemail).any():
+                        missedquizzes.append(col)
+
+        # missedquizzesdict = {'missedquizzes': missedquizzes, 'assignedquizzes': assignedquizzes}
+        return missedquizzes
+
+    def generateletter(self, name, email, missedquizzes, programdirectoremail):
+        lettertext1 = "Hi " + name.split(" ")[0] + ",\n\n" + \
+                      "You are missing the following work. Kindly complete your work as soon as \npossible or " \
+                      "request an extension using the 'Assignment Extension Request Form'.\n\nOnly one extension " \
+                      "of 1 week per assignment is allowed.\n\n'Assignment Extension Request Form' is posted in the " \
+                      "'Course Summary' section \nand is accessible from all weeks.\n\n\n"
+
+        lettertext2 = "   "
+        for n, c in enumerate(missedquizzes, 1):
+            lettertext2 = lettertext2 + str(n) + ". " + str(c) + "\n   "
+
+        lettertext3 = "\n\nKindly let me know if you have any questions or need help with the material.\n" \
+                      "My office hours are every Tuesday at 12pm.\n\n" \
+                      "Best\nDr. Chatterjee\n\n"
+
+        # letter = "=" * 70 + "\n" + email + ", " + programdirectoremail + "\n\n" + \
+        #          lettertext1 + lettertext2 + lettertext3 + "=" * 70
+        letter = "=" * 70 + "\n" + email + "\n\n" + \
+                 lettertext1 + lettertext2 + lettertext3
+
+        return letter
+
+
+
 

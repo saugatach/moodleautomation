@@ -32,6 +32,11 @@ def determine_grade(score):
         return "F"
 
 
+def containstring(pattern, string):
+    """Returns TRUE if the string contains the pattern"""
+    return len(re.findall(pattern, string)) > 0
+
+
 class MoodleAutomation:
     """This class automates Moodle administration"""
 
@@ -70,7 +75,7 @@ class MoodleAutomation:
             # delete existing gradebooks and download latest version
             for f in glob.glob(self.PARENT_DIRECTORY + 'PHX*.csv'):
                 print("Deleting ", f)
-                # os.remove(f)
+                os.remove(f)
 
             self.get_gradebooks(self.df_courseid, verbose)
             self.renamefiles()
@@ -178,6 +183,7 @@ class MoodleAutomation:
             exit(-1)
 
         sleepy(5)
+
     # ---------------------------[End Login]---------------------------- #
     # ---===================[reusable code [end]]====================--- #
 
@@ -245,7 +251,7 @@ class MoodleAutomation:
         # table = soup.findAll('table')[0]
 
         nameslist = list(soup.findAll('a', class_="username"))
-        stunames = nameslist[:int(len(nameslist)/2)]
+        stunames = nameslist[:int(len(nameslist) / 2)]
         student_ids = list(map(lambda x: re.findall(r'id=(\d+)', str(x))[0], stunames))
         student_names = list(map(lambda x: re.findall(r'>(.*)<', str(x))[0], stunames))
         student_emails = list(map(lambda x: x.text, soup.findAll('td', class_='userfield useremail cell c2')))
@@ -383,7 +389,7 @@ class MoodleAutomation:
                 df1 = df[['First name', 'Last name', col]][((df[col] == '-') & (df['First name'] != 'Student'))]
                 if len(df1) == 0:
                     continue
-                print(f, '='*80)
+                print(f, '=' * 80)
                 print(tabulate(df1, headers='keys', tablefmt='psql'))
                 input("Fix the above missing grades and press enter")
 
@@ -466,9 +472,8 @@ class MoodleAutomation:
         else:
             print("Clean")
 
-
     def check_logs(self, studentid, courseid, verbose=True):
-        log_url = 'https://online.brooklinecollege.edu/report/log/user.php?id={0}&course={1}&mode=today'.\
+        log_url = 'https://online.brooklinecollege.edu/report/log/user.php?id={0}&course={1}&mode=today'. \
             format(studentid, courseid)
         self.driver.get(log_url)
         if verbose:
@@ -619,7 +624,7 @@ class MoodleAutomation:
         dfsrugglingstudents = dfsrugglingstudentsalldata.rename(columns={'Course total (Percentage)': 'grade'})[
             templist]
         # remove % sign from "Overall Grade" and convert it to float
-        dfsrugglingstudents['grade'] = dfsrugglingstudents['grade'].fillna(0).astype(str).\
+        dfsrugglingstudents['grade'] = dfsrugglingstudents['grade'].fillna(0).astype(str). \
             map(lambda x: re.sub('-', '0 %', x)).map(lambda x: float(x.rstrip(' %')))
 
         # rederive the riskscore using the "Overall Grade". Higher "Overall Grade" means lower riskscore
@@ -629,7 +634,8 @@ class MoodleAutomation:
 
         # rearranging columns to put riskscore at the end
         coltoarrange = ['Email address', 'Name', 'Program', 'grade', 'riskscore']
-        list(map(lambda x: coltoarrange.append(re.findall(r'missed.*', x)[0]) if len(re.findall(r'missed.*', x)) > 0 else '',
+        list(map(
+            lambda x: coltoarrange.append(re.findall(r'missed.*', x)[0]) if len(re.findall(r'missed.*', x)) > 0 else '',
             dfsrugglingstudents.columns.tolist()))
         # print(coltoarrange)
 
@@ -717,28 +723,60 @@ class MoodleAutomation:
         # missedquizzesdict = {'missedquizzes': missedquizzes, 'assignedquizzes': assignedquizzes}
         return missedquizzes
 
-    def generateletter(self, name, email, missedquizzes, programdirectoremail):
-        lettertext1 = "Hi " + name.split(" ")[0] + ",\n\n" + \
-                      "You are missing the following work. Kindly complete your work as soon as \npossible or " \
-                      "request an extension using the 'Assignment Extension Request Form'.\n\nOnly one extension " \
-                      "of 1 week per assignment is allowed.\n\n'Assignment Extension Request Form' is posted in the " \
-                      "'Course Summary' section \nand is accessible from all weeks.\n\n\n"
+    def generateletter(self, name, email, missedquizzes, emailtemplate=None):
 
-        lettertext2 = "   "
-        for n, c in enumerate(missedquizzes, 1):
-            lettertext2 = lettertext2 + str(n) + ". " + str(c) + "\n   "
+        if emailtemplate is None:
+            emailtemplate = open(self.PARENT_DIRECTORY + 'emailtemplate1', 'r')
+            f = emailtemplate
 
-        lettertext3 = "\n\nKindly let me know if you have any questions or need help with the material.\n" \
-                      "My office hours are every Tuesday at 12pm.\n\n" \
-                      "Best\nDr. Chatterjee\n\n"
+        lettertext = ''
 
-        # letter = "=" * 70 + "\n" + email + ", " + programdirectoremail + "\n\n" + \
-        #          lettertext1 + lettertext2 + lettertext3 + "=" * 70
-        letter = "=" * 70 + "\n" + email + "\n\n" + \
-                 lettertext1 + lettertext2 + lettertext3
+        with f:
+            line = f.readline()
 
-        return letter
+            while line:
+                if containstring('\\[email\\]', line):
+                    line1 = re.sub('\[email\]', email, line)
+                elif containstring('\\[name\\]', line):
+                    line1 = re.sub('\[name\]', name.split(" ")[0], line)
+                elif containstring('\\[assignments\\]', line):
+                    lettertext2 = "   "
+                    for n, c in enumerate(missedquizzes, 1):
+                        lettertext2 = lettertext2 + str(n) + ". " + str(c) + "\n   "
+                    line1 = lettertext2
+                else:
+                    line1 = line
 
+                lettertext = lettertext + line1
 
+                line = f.readline()
 
+        return lettertext
 
+        #
+        #
+        #
+        #
+        #
+        # lettertext1 = "Hi " + name.split(" ")[0] + ",\n\n" + \
+        #               "You are missing the following work. Kindly complete your work as soon as \npossible or " \
+        #               "request an extension using the 'Assignment Extension Request Form'.\n\nOnly one extension " \
+        #               "of 1 week per assignment is allowed.\n\n'Assignment Extension Request Form' is posted in the " \
+        #               "'Course Summary' section \nand is accessible from all weeks.\n\n\n"
+        #
+        # lettertext2 = "   "
+        # for n, c in enumerate(missedquizzes, 1):
+        #     lettertext2 = lettertext2 + str(n) + ". " + str(c) + "\n   "
+        #
+        # lettertext3 = "\n\nKindly let me know if you have any questions or need help with the material.\n" \
+        #               "My office hours are every Tuesday at 12pm.\n\n" \
+        #               "Best\nDr. Chatterjee\n\n"
+        #
+        # letter = "=" * 70 + "\n" + email + "\n\n" + \
+        #          lettertext1 + lettertext2 + lettertext3
+        #
+        # return letter
+        #
+        #
+        #
+        #

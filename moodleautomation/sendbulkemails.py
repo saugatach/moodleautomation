@@ -1,24 +1,19 @@
 #!/usr/bin/env python
 
-import argparse
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
 import time
-import sys
 import glob
 import re
 import numpy as np
-import pandas as pd
-from tabulate import tabulate
 
 
 def sleepy(sleepytime=2):
     time.sleep(sleepytime + np.random.randint(2))
 
 
-# https://www.freecodecamp.org/news/send-emails-using-code-4fcea9df63f/
 def sendmessage(s, emailto, emailsubject, emailmsg):
     msg = MIMEMultipart()
     msg['From'] = "saugata.chatterjee@brooklinecollege.edu"

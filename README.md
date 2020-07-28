@@ -1,7 +1,7 @@
 
 # Moodleautomation
 
-Automates many repetitive Moodle operations.
+Automates repetitive tasks on Moodle gradebook.
 
 ## INSTALLATION
 

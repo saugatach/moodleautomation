@@ -71,8 +71,7 @@ The `scripts` folder contains scripts that can be used to clean out the old grad
 
 ## UML diagrams
 
-```mermaid
-graph LR
+```mermaid graph LR
 A(moodleautomation) --> B(downloadgradebook)
 B(downloadgradebook) --> C[../data/gradebook.csv]
 B(downloadgradebook) --> D[../data/studentid.csv]

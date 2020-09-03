@@ -83,4 +83,10 @@ F(findstrugglingstudents) --> I[../data/emails.csv]
 G[../data/emailtemplate] --> I[../data/emails.csv]
 I[../data/emails.csv] --> K(sendbulkemails)
 ```
-
+```mermaid
+graph TD;
+  A-->B;
+  A-->C;
+  B-->D;
+  C-->D;
+```

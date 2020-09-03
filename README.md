@@ -71,16 +71,4 @@ The `scripts` folder contains scripts that can be used to clean out the old grad
 
 ## UML diagrams
 
-<!--```mermaid-->
-<!--graph LR-->
-<!--A(moodleautomation) --> B(downloadgradebook)-->
-<!--B(downloadgradebook) --> C[../data/gradebook.csv]-->
-<!--B(downloadgradebook) --> D[../data/studentid.csv]-->
-<!--B(downloadgradebook) --> E[../data/courseid.csv]-->
-<!--C[../data/gradebook.csv] --> F(findstrugglingstudents)-->
-<!--F(findstrugglingstudents) --> H[../data/struggling.csv]-->
-<!--F(findstrugglingstudents) --> I[../data/emails.csv]-->
-<!--G[../data/emailtemplate] --> I[../data/emails.csv]-->
-<!--I[../data/emails.csv] --> K(sendbulkemails)-->
-<!--```-->
 ![UML](https://mermaid.ink/img/eyJjb2RlIjoiZ3JhcGggTFJcbkEobW9vZGxlYXV0b21hdGlvbikgLS0-IEIoZG93bmxvYWRncmFkZWJvb2spXG5CKGRvd25sb2FkZ3JhZGVib29rKSAtLT4gQ1suLi9kYXRhL2dyYWRlYm9vay5jc3ZdXG5CKGRvd25sb2FkZ3JhZGVib29rKSAtLT4gRFsuLi9kYXRhL3N0dWRlbnRpZC5jc3ZdXG5CKGRvd25sb2FkZ3JhZGVib29rKSAtLT4gRVsuLi9kYXRhL2NvdXJzZWlkLmNzdl1cbkNbLi4vZGF0YS9ncmFkZWJvb2suY3N2XSAtLT4gRihmaW5kc3RydWdnbGluZ3N0dWRlbnRzKVxuRihmaW5kc3RydWdnbGluZ3N0dWRlbnRzKSAtLT4gSFsuLi9kYXRhL3N0cnVnZ2xpbmcuY3N2XVxuRihmaW5kc3RydWdnbGluZ3N0dWRlbnRzKSAtLT4gSVsuLi9kYXRhL2VtYWlscy5jc3ZdXG5HWy4uL2RhdGEvZW1haWx0ZW1wbGF0ZV0gLS0-IElbLi4vZGF0YS9lbWFpbHMuY3N2XVxuSVsuLi9kYXRhL2VtYWlscy5jc3ZdIC0tPiBLKHNlbmRidWxrZW1haWxzKSIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0In0sInVwZGF0ZUVkaXRvciI6ZmFsc2V9)

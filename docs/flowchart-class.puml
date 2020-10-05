@@ -1,0 +1,37 @@
+@startuml
+
+class MoodleAutomation {
+PARENT_DIRECTORY
+inputdir
+outputdir
+logincredfile
+courseidfile
+studentidfile
+def sleepy(sleepytime=2)
+def extractnumber(s)
+def printdataframe(dftemp)
+def determine_grade(score)
+def containstring(pattern, string)
+def ff(self, elementname, classname)
+def get_element(self, cl, el='div')
+def load_webdriver(self, url, headless=False, incognito=False, verbose=True)
+def login(self, logincredfile)
+def get_course_id(self, verbose=True)
+def get_student_id_from_gradebook(self, courseid, verbose=True)
+def getallid(self, df_cid1, verbose=True)
+def get_gradebooks(self, df_courseid, verbose=True)
+def renamefiles(self, verbose=True)
+def identifyemptygrades(self, verbose=True)
+def calcfinalgrade(self, verbose=True)
+def check_student_log(self, verbose=True)
+def check_logs(self, studentid, courseid, verbose=True)
+def getstrugglingstudents(self, df, el, s, verbose=True)
+def courseperf(self, df, categorypattern dict = None, verbose=True)
+def getemptyquizzes(self, df, studentemail, categorypattern dict = None)
+def getemptyquizzesbycategory(self, df, s, studentemail)
+def generateletter(self, name, email, missedquizzes, emailtemplate=None)
+def gethwlinks(self, verbose)
+
+}
+
+@enduml

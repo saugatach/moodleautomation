@@ -1,0 +1,12 @@
+@startuml
+!define DARKORANGE
+(moodleautomation) --> (downloadgradebook)
+(downloadgradebook) --> [../data/gradebook.csv]
+(downloadgradebook) --> [../data/studentid.csv]
+(downloadgradebook) --> [../data/courseid.csv]
+[../data/gradebook.csv] --> (findstrugglingstudents)
+(findstrugglingstudents) --> [../data/struggling.csv]
+(findstrugglingstudents) --> [../data/emails.csv]
+[../data/emailtemplate] --> [../data/emails.csv]
+[../data/emails.csv] --> (sendbulkemails)
+@enduml
